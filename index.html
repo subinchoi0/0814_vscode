@@ -201,70 +201,48 @@
     </div>
 
     <script>
-        // Supabase 초기화
-        const SUPABASE_URL = '__SUPABASE_URL__';
-        const SUPABASE_ANON_KEY = '__SUPABASE_ANON_KEY__';
+        // Supabase 설정
+        const SUPABASE_URL = typeof __SUPABASE_URL__ !== 'undefined' && __SUPABASE_URL__ ? __SUPABASE_URL__ : '';
+        const SUPABASE_ANON_KEY = typeof __SUPABASE_ANON_KEY__ !== 'undefined' && __SUPABASE_ANON_KEY__ ? __SUPABASE_ANON_KEY__ : '';
         
         let supabase = null;
-        
-        // Supabase 클라이언트 초기화
-        function initSupabase() {
-            if (SUPABASE_URL && SUPABASE_ANON_KEY) {
-                supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-                console.log('✓ Supabase initialized successfully');
-            } else {
-                console.warn('⚠ Supabase credentials not configured. Using local storage.');
-            }
-        }
+        let history = [];
 
+        // DOM 요소 선택
         const container = document.getElementById('numbersContainer');
         const drawBtn = document.getElementById('drawBtn');
         const resetBtn = document.getElementById('resetBtn');
         const historyList = document.getElementById('historyList');
 
-        let history = JSON.parse(localStorage.getItem('lottoHistory')) || [];
-
-        // 초기화 시 이력 표시
-        async function displayHistory() {
-            historyList.innerHTML = '';
-            
-            if (supabase) {
+        // Supabase 초기화
+        function initSupabase() {
+            if (SUPABASE_URL && SUPABASE_ANON_KEY && !SUPABASE_URL.includes('__') && !SUPABASE_ANON_KEY.includes('__')) {
                 try {
-                    // Supabase에서 이력 조회
-                    const { data, error } = await supabase
-                        .from('lottery_history')
-                        .select('*')
-                        .order('created_at', { ascending: false })
-                        .limit(10);
-                    
-                    if (error) throw error;
-                    
-                    if (data && data.length > 0) {
-                        data.forEach((item) => {
-                            const div = document.createElement('div');
-                            div.className = 'history-item';
-                            const createdAt = new Date(item.created_at).toLocaleString('ko-KR');
-                            div.innerHTML = `
-                                <strong>${item.numbers}</strong> + <span style="color: #f5576c;">보너스: ${item.bonus}</span>
-                                <small>${createdAt}</small>
-                            `;
-                            historyList.appendChild(div);
-                        });
-                    }
+                    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+                    console.log('✓ Supabase initialized');
+                    return true;
                 } catch (err) {
-                    console.error('Error loading history from Supabase:', err);
-                    // Supabase 에러 시 로컬 스토리지 사용
-                    displayLocalHistory();
+                    console.warn('Supabase initialization error:', err);
                 }
-            } else {
-                displayLocalHistory();
             }
+            console.log('⚠ Using local storage only');
+            return false;
         }
 
-        // 로컬 스토리지 이력 표시
-        function displayLocalHistory() {
+        // 로컬 스토리지에서 이력 로드
+        function loadLocalHistory() {
+            const stored = localStorage.getItem('lottoHistory');
+            history = stored ? JSON.parse(stored) : [];
+        }
+
+        // 이력 표시
+        function displayHistory() {
             historyList.innerHTML = '';
-            history.forEach((item, index) => {
+            if (history.length === 0) {
+                historyList.innerHTML = '<p style="color: #ccc; text-align: center;">아직 추첨 이력이 없습니다</p>';
+                return;
+            }
+            history.forEach((item) => {
                 const div = document.createElement('div');
                 div.className = 'history-item';
                 div.innerHTML = `
@@ -275,25 +253,22 @@
             });
         }
 
-        // 로또 번호 추첨
+        // 로또 번호 생성
         function generateLotto() {
-            // 1~45 숫자 배열 생성
             const numbers = Array.from({ length: 45 }, (_, i) => i + 1);
             
-            // Fisher-Yates 셔플
             for (let i = numbers.length - 1; i > 0; i--) {
                 const j = Math.floor(Math.random() * (i + 1));
                 [numbers[i], numbers[j]] = [numbers[j], numbers[i]];
             }
 
-            // 앞의 6개를 선택 번호, 다음 1개를 보너스로
             const selectedNumbers = numbers.slice(0, 6).sort((a, b) => a - b);
             const bonusNumber = numbers[6];
 
             return { selectedNumbers, bonusNumber };
         }
 
-        // 화면에 번호 표시
+        // 번호 화면에 표시
         function displayNumbers(selectedNumbers, bonusNumber) {
             container.innerHTML = '';
 
@@ -305,7 +280,6 @@
                 container.appendChild(box);
             });
 
-            // 보너스 번호
             const bonusBox = document.createElement('div');
             bonusBox.className = 'number-box bonus-box';
             bonusBox.textContent = bonusNumber;
@@ -319,86 +293,91 @@
             container.appendChild(bonusBox);
         }
 
-        // Supabase에 이력 저장
+        // Supabase에 저장
         async function saveToSupabase(numbersStr, bonusNumber) {
             if (!supabase) return;
             
             try {
-                const { data, error } = await supabase
+                const { error } = await supabase
                     .from('lottery_history')
                     .insert([{
                         numbers: numbersStr,
                         bonus: bonusNumber
                     }]);
                 
-                if (error) throw error;
-                console.log('✓ Saved to Supabase:', data);
+                if (error) {
+                    console.warn('Supabase save error:', error);
+                } else {
+                    console.log('✓ Saved to Supabase');
+                }
             } catch (err) {
-                console.error('Error saving to Supabase:', err);
+                console.error('Supabase error:', err);
             }
         }
 
-        // 추첨 버튼 클릭
-        drawBtn.addEventListener('click', async () => {
-            drawBtn.disabled = true;
+        // 추첨 버튼 이벤트
+        if (drawBtn) {
+            drawBtn.addEventListener('click', function() {
+                drawBtn.disabled = true;
 
-            const { selectedNumbers, bonusNumber } = generateLotto();
-            displayNumbers(selectedNumbers, bonusNumber);
+                const { selectedNumbers, bonusNumber } = generateLotto();
+                displayNumbers(selectedNumbers, bonusNumber);
 
-            const numbersStr = selectedNumbers.join(', ');
-            
-            // Supabase에 저장 시도
-            if (supabase) {
-                await saveToSupabase(numbersStr, bonusNumber);
-            }
+                const numbersStr = selectedNumbers.join(', ');
+                const now = new Date();
+                const timeStr = now.toLocaleString('ko-KR');
+                
+                history.unshift({
+                    numbers: numbersStr,
+                    bonus: bonusNumber,
+                    time: timeStr
+                });
 
-            // 로컬 스토리지에도 저장 (백업용)
-            const now = new Date();
-            const timeStr = now.toLocaleString('ko-KR');
-            
-            history.unshift({
-                numbers: numbersStr,
-                bonus: bonusNumber,
-                time: timeStr
-            });
-
-            if (history.length > 10) {
-                history.pop();
-            }
-
-            localStorage.setItem('lottoHistory', JSON.stringify(history));
-            
-            // 이력 표시 업데이트
-            setTimeout(async () => {
-                await displayHistory();
-                drawBtn.disabled = false;
-            }, 700);
-        });
-
-        // 초기화 버튼 클릭
-        resetBtn.addEventListener('click', async () => {
-            container.innerHTML = '<p style="color: #999;">추첨 버튼을 클릭하세요</p>';
-            history = [];
-            localStorage.removeItem('lottoHistory');
-            
-            // Supabase에서도 삭제 시도
-            if (supabase) {
-                try {
-                    await supabase.from('lottery_history').delete().neq('id', '');
-                    console.log('✓ History cleared from Supabase');
-                } catch (err) {
-                    console.error('Error clearing Supabase history:', err);
+                if (history.length > 10) {
+                    history.pop();
                 }
-            }
-            
-            await displayHistory();
-        });
 
-        // 페이지 로드 시 초기화
-        window.addEventListener('load', async () => {
+                localStorage.setItem('lottoHistory', JSON.stringify(history));
+                
+                // Supabase 저장
+                saveToSupabase(numbersStr, bonusNumber);
+
+                setTimeout(() => {
+                    displayHistory();
+                    drawBtn.disabled = false;
+                }, 700);
+            });
+        }
+
+        // 초기화 버튼 이벤트
+        if (resetBtn) {
+            resetBtn.addEventListener('click', function() {
+                container.innerHTML = '<p style="color: #999;">추첨 버튼을 클릭하세요</p>';
+                history = [];
+                localStorage.removeItem('lottoHistory');
+                displayHistory();
+                
+                if (supabase) {
+                    supabase.from('lottery_history').delete().neq('id', '').catch(err => 
+                        console.warn('Delete history error:', err)
+                    );
+                }
+            });
+        }
+
+        // 초기화 함수
+        function init() {
+            loadLocalHistory();
             initSupabase();
-            await displayHistory();
-        });
+            displayHistory();
+        }
+
+        // 페이지 로드 후 초기화
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', init);
+        } else {
+            init();
+        }
     </script>
 </body>
 </html>
