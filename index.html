@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>로또 추첨기</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         * {
             margin: 0;
@@ -200,6 +201,22 @@
     </div>
 
     <script>
+        // Supabase 초기화
+        const SUPABASE_URL = '__SUPABASE_URL__';
+        const SUPABASE_ANON_KEY = '__SUPABASE_ANON_KEY__';
+        
+        let supabase = null;
+        
+        // Supabase 클라이언트 초기화
+        function initSupabase() {
+            if (SUPABASE_URL && SUPABASE_ANON_KEY) {
+                supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+                console.log('✓ Supabase initialized successfully');
+            } else {
+                console.warn('⚠ Supabase credentials not configured. Using local storage.');
+            }
+        }
+
         const container = document.getElementById('numbersContainer');
         const drawBtn = document.getElementById('drawBtn');
         const resetBtn = document.getElementById('resetBtn');
@@ -208,7 +225,44 @@
         let history = JSON.parse(localStorage.getItem('lottoHistory')) || [];
 
         // 초기화 시 이력 표시
-        function displayHistory() {
+        async function displayHistory() {
+            historyList.innerHTML = '';
+            
+            if (supabase) {
+                try {
+                    // Supabase에서 이력 조회
+                    const { data, error } = await supabase
+                        .from('lottery_history')
+                        .select('*')
+                        .order('created_at', { ascending: false })
+                        .limit(10);
+                    
+                    if (error) throw error;
+                    
+                    if (data && data.length > 0) {
+                        data.forEach((item) => {
+                            const div = document.createElement('div');
+                            div.className = 'history-item';
+                            const createdAt = new Date(item.created_at).toLocaleString('ko-KR');
+                            div.innerHTML = `
+                                <strong>${item.numbers}</strong> + <span style="color: #f5576c;">보너스: ${item.bonus}</span>
+                                <small>${createdAt}</small>
+                            `;
+                            historyList.appendChild(div);
+                        });
+                    }
+                } catch (err) {
+                    console.error('Error loading history from Supabase:', err);
+                    // Supabase 에러 시 로컬 스토리지 사용
+                    displayLocalHistory();
+                }
+            } else {
+                displayLocalHistory();
+            }
+        }
+
+        // 로컬 스토리지 이력 표시
+        function displayLocalHistory() {
             historyList.innerHTML = '';
             history.forEach((item, index) => {
                 const div = document.createElement('div');
@@ -265,17 +319,42 @@
             container.appendChild(bonusBox);
         }
 
+        // Supabase에 이력 저장
+        async function saveToSupabase(numbersStr, bonusNumber) {
+            if (!supabase) return;
+            
+            try {
+                const { data, error } = await supabase
+                    .from('lottery_history')
+                    .insert([{
+                        numbers: numbersStr,
+                        bonus: bonusNumber
+                    }]);
+                
+                if (error) throw error;
+                console.log('✓ Saved to Supabase:', data);
+            } catch (err) {
+                console.error('Error saving to Supabase:', err);
+            }
+        }
+
         // 추첨 버튼 클릭
-        drawBtn.addEventListener('click', () => {
+        drawBtn.addEventListener('click', async () => {
             drawBtn.disabled = true;
 
             const { selectedNumbers, bonusNumber } = generateLotto();
             displayNumbers(selectedNumbers, bonusNumber);
 
-            // 이력에 추가
+            const numbersStr = selectedNumbers.join(', ');
+            
+            // Supabase에 저장 시도
+            if (supabase) {
+                await saveToSupabase(numbersStr, bonusNumber);
+            }
+
+            // 로컬 스토리지에도 저장 (백업용)
             const now = new Date();
             const timeStr = now.toLocaleString('ko-KR');
-            const numbersStr = selectedNumbers.join(', ');
             
             history.unshift({
                 numbers: numbersStr,
@@ -288,23 +367,38 @@
             }
 
             localStorage.setItem('lottoHistory', JSON.stringify(history));
-            displayHistory();
-
-            setTimeout(() => {
+            
+            // 이력 표시 업데이트
+            setTimeout(async () => {
+                await displayHistory();
                 drawBtn.disabled = false;
             }, 700);
         });
 
         // 초기화 버튼 클릭
-        resetBtn.addEventListener('click', () => {
+        resetBtn.addEventListener('click', async () => {
             container.innerHTML = '<p style="color: #999;">추첨 버튼을 클릭하세요</p>';
             history = [];
             localStorage.removeItem('lottoHistory');
-            displayHistory();
+            
+            // Supabase에서도 삭제 시도
+            if (supabase) {
+                try {
+                    await supabase.from('lottery_history').delete().neq('id', '');
+                    console.log('✓ History cleared from Supabase');
+                } catch (err) {
+                    console.error('Error clearing Supabase history:', err);
+                }
+            }
+            
+            await displayHistory();
         });
 
-        // 페이지 로드 시 이력 표시
-        displayHistory();
+        // 페이지 로드 시 초기화
+        window.addEventListener('load', async () => {
+            initSupabase();
+            await displayHistory();
+        });
     </script>
 </body>
 </html>

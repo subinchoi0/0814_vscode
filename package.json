@@ -1,0 +1,9 @@
+{
+  "name": "lottery-picker",
+  "version": "1.0.0",
+  "description": "로또 추첨기 with Supabase",
+  "scripts": {
+    "build": "node build.js",
+    "dev": "node -e \"require('http').createServer((req, res) => { res.writeHead(200, {'Content-Type': 'text/html; charset=utf-8'}); const fs = require('fs'); res.end(fs.readFileSync('index.html')); }).listen(3000, () => console.log('Server running on http://localhost:3000'))\""
+  }
+}
