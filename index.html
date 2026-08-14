@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>로또 추첨기</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 500px;
+            width: 100%;
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 1em;
+        }
+
+        .numbers-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 30px;
+            justify-content: center;
+            min-height: 150px;
+            align-items: center;
+        }
+
+        .number-box {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5em;
+            font-weight: bold;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            animation: popIn 0.5s ease-out backwards;
+        }
+
+        @keyframes popIn {
+            0% {
+                transform: scale(0);
+                opacity: 0;
+            }
+            100% {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+
+        .bonus-box {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            position: relative;
+            margin-top: 20px;
+        }
+
+        .bonus-label {
+            position: absolute;
+            top: -25px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #f5576c;
+            color: white;
+            padding: 3px 10px;
+            border-radius: 10px;
+            font-size: 0.8em;
+            white-space: nowrap;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 30px;
+        }
+
+        button {
+            flex: 1;
+            padding: 15px 20px;
+            font-size: 1.1em;
+            font-weight: bold;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .draw-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .draw-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
+        }
+
+        .draw-btn:active {
+            transform: translateY(0);
+        }
+
+        .draw-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .reset-btn {
+            background: #e0e0e0;
+            color: #333;
+        }
+
+        .reset-btn:hover {
+            background: #d0d0d0;
+        }
+
+        .history {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 2px solid #eee;
+        }
+
+        .history-title {
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 1.1em;
+        }
+
+        .history-list {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .history-item {
+            background: #f5f5f5;
+            padding: 10px;
+            margin-bottom: 8px;
+            border-radius: 8px;
+            font-size: 0.95em;
+            color: #666;
+        }
+
+        .history-item small {
+            color: #999;
+            display: block;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎰 로또 추첨기</h1>
+        <p class="subtitle">당신의 운을 시험해보세요!</p>
+
+        <div class="numbers-container" id="numbersContainer">
+            <p style="color: #999;">추첨 버튼을 클릭하세요</p>
+        </div>
+
+        <div class="button-group">
+            <button class="draw-btn" id="drawBtn">추첨하기</button>
+            <button class="reset-btn" id="resetBtn">초기화</button>
+        </div>
+
+        <div class="history">
+            <div class="history-title">📋 추첨 이력</div>
+            <div class="history-list" id="historyList"></div>
+        </div>
+    </div>
+
+    <script>
+        const container = document.getElementById('numbersContainer');
+        const drawBtn = document.getElementById('drawBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        const historyList = document.getElementById('historyList');
+
+        let history = JSON.parse(localStorage.getItem('lottoHistory')) || [];
+
+        // 초기화 시 이력 표시
+        function displayHistory() {
+            historyList.innerHTML = '';
+            history.forEach((item, index) => {
+                const div = document.createElement('div');
+                div.className = 'history-item';
+                div.innerHTML = `
+                    <strong>${item.numbers}</strong> + <span style="color: #f5576c;">보너스: ${item.bonus}</span>
+                    <small>${item.time}</small>
+                `;
+                historyList.appendChild(div);
+            });
+        }
+
+        // 로또 번호 추첨
+        function generateLotto() {
+            // 1~45 숫자 배열 생성
+            const numbers = Array.from({ length: 45 }, (_, i) => i + 1);
+            
+            // Fisher-Yates 셔플
+            for (let i = numbers.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [numbers[i], numbers[j]] = [numbers[j], numbers[i]];
+            }
+
+            // 앞의 6개를 선택 번호, 다음 1개를 보너스로
+            const selectedNumbers = numbers.slice(0, 6).sort((a, b) => a - b);
+            const bonusNumber = numbers[6];
+
+            return { selectedNumbers, bonusNumber };
+        }
+
+        // 화면에 번호 표시
+        function displayNumbers(selectedNumbers, bonusNumber) {
+            container.innerHTML = '';
+
+            selectedNumbers.forEach((num, index) => {
+                const box = document.createElement('div');
+                box.className = 'number-box';
+                box.textContent = num;
+                box.style.animationDelay = `${index * 0.1}s`;
+                container.appendChild(box);
+            });
+
+            // 보너스 번호
+            const bonusBox = document.createElement('div');
+            bonusBox.className = 'number-box bonus-box';
+            bonusBox.textContent = bonusNumber;
+            bonusBox.style.animationDelay = '0.6s';
+            
+            const bonusLabel = document.createElement('div');
+            bonusLabel.className = 'bonus-label';
+            bonusLabel.textContent = '보너스';
+            bonusBox.appendChild(bonusLabel);
+            
+            container.appendChild(bonusBox);
+        }
+
+        // 추첨 버튼 클릭
+        drawBtn.addEventListener('click', () => {
+            drawBtn.disabled = true;
+
+            const { selectedNumbers, bonusNumber } = generateLotto();
+            displayNumbers(selectedNumbers, bonusNumber);
+
+            // 이력에 추가
+            const now = new Date();
+            const timeStr = now.toLocaleString('ko-KR');
+            const numbersStr = selectedNumbers.join(', ');
+            
+            history.unshift({
+                numbers: numbersStr,
+                bonus: bonusNumber,
+                time: timeStr
+            });
+
+            if (history.length > 10) {
+                history.pop();
+            }
+
+            localStorage.setItem('lottoHistory', JSON.stringify(history));
+            displayHistory();
+
+            setTimeout(() => {
+                drawBtn.disabled = false;
+            }, 700);
+        });
+
+        // 초기화 버튼 클릭
+        resetBtn.addEventListener('click', () => {
+            container.innerHTML = '<p style="color: #999;">추첨 버튼을 클릭하세요</p>';
+            history = [];
+            localStorage.removeItem('lottoHistory');
+            displayHistory();
+        });
+
+        // 페이지 로드 시 이력 표시
+        displayHistory();
+    </script>
+</body>
+</html>
